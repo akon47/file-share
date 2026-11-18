@@ -1,0 +1,14 @@
+{
+  "files": [],
+  "references": [],
+  "compilerOptions": {
+    "target": "ES2023",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "strict": true,
+    "skipLibCheck": true,
+    "types": ["node"],
+    "noEmit": true
+  },
+  "include": ["test/**/*.ts", "vite.config.ts", "vitest.config.ts"]
+}

@@ -1,0 +1,8 @@
+node_modules
+dist
+.git
+.shots
+test-results
+*.log
+deploy
+Jenkinsfile

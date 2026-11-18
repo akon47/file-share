@@ -1,0 +1,54 @@
+{
+  "name": "file-share",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Browser-to-browser file sharing over WebRTC: nearby devices on the same network, share links, codes and passwords. Files never touch the server.",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "concurrently -k -n server,web -c blue,green \"npm:dev:server\" \"npm:dev:web\"",
+    "dev:server": "tsx watch src/server/index.ts",
+    "dev:web": "vite",
+    "build": "npm run build:web && npm run build:server",
+    "build:web": "vite build",
+    "build:server": "tsc -p tsconfig.server.json",
+    "start": "node dist/server/index.js",
+    "typecheck": "tsc -p tsconfig.server.json --noEmit && vue-tsc -p tsconfig.web.json --noEmit",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "e2e": "node scripts/e2e.mjs"
+  },
+  "dependencies": {
+    "ws": "^8.23.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.0",
+    "@types/node": "^24.0.0",
+    "@types/qrcode": "^1.5.6",
+    "@types/ws": "^8.18.2",
+    "@vitejs/plugin-vue": "^6.0.11",
+    "client-zip": "^2.5.1",
+    "concurrently": "^9.2.0",
+    "eslint": "^10.15.0",
+    "eslint-config-prettier": "^10.1.0",
+    "eslint-plugin-vue": "^10.12.1",
+    "globals": "^17.14.0",
+    "playwright": "^1.65.1",
+    "prettier": "^3.10.1",
+    "qrcode": "^1.5.4",
+    "tsx": "^4.23.15",
+    "typescript": "~5.9.3",
+    "typescript-eslint": "^8.73.0",
+    "vite": "^8.3.8",
+    "vitest": "^5.1.1",
+    "vue": "^3.5.45",
+    "vue-router": "^4.6.4",
+    "vue-tsc": "^3.3.14"
+  }
+}

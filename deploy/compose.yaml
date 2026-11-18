@@ -1,0 +1,36 @@
+# file-share VM (10.10.10.225). The nginx gateway LXC terminates TLS for fileshare.kimhwan.com and proxies
+# everything (including the WebSocket at /ws) to http://10.10.10.225:8080, setting X-Real-IP to the client
+# address — the server groups "same network" devices by that address, so TRUSTED_PROXY must stay on.
+# ./data holds signing.key (lets browsers re-register their shares after a restart). No other state.
+name: file-share
+
+services:
+  app:
+    image: akon47/file-share:${APP_TAG:-latest}
+    restart: unless-stopped
+    ports:
+      - '10.10.10.225:8080:8080'
+    environment:
+      PORT: '8080'
+      HOST: '0.0.0.0'
+      DATA_DIR: /data
+      TRUSTED_PROXY: 'true'
+      ALLOWED_ORIGINS: https://fileshare.kimhwan.com
+    volumes:
+      - ./data:/data
+    mem_limit: 384m
+    read_only: true
+    tmpfs:
+      - /tmp
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:8080/healthz').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
