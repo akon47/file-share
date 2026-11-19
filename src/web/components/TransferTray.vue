@@ -8,13 +8,13 @@
             <span class="title ellipsis">{{ title(t) }}</span>
             <span class="tiny subtle num">{{ detail(t) }}</span>
           </div>
-          <div v-if="t.status === 'receiving'" class="progress">
+          <div v-if="t.status === 'receiving' || t.status === 'reconnecting'" class="progress">
             <span :style="{ width: `${percent(t.received, t.total)}%` }" />
           </div>
           <p v-else-if="t.error" class="tiny error-text">{{ t.error }}</p>
         </div>
         <button
-          v-if="t.status === 'receiving'"
+          v-if="t.status === 'receiving' || t.status === 'reconnecting'"
           class="btn btn-icon btn-sm"
           type="button"
           aria-label="받기 취소"
@@ -45,6 +45,8 @@ function title(t: IncomingPush): string {
   switch (t.status) {
     case 'receiving':
       return `${t.peer.name} → ${what}`;
+    case 'reconnecting':
+      return `연결이 끊겨 다시 연결하는 중 · ${what}`;
     case 'done':
       return `받았어요 · ${what}`;
     case 'cancelled':
@@ -55,6 +57,7 @@ function title(t: IncomingPush): string {
 }
 
 function detail(t: IncomingPush): string {
+  if (t.status === 'reconnecting') return `${Math.floor(percent(t.received, t.total))}%`;
   if (t.status === 'receiving') return `${Math.floor(percent(t.received, t.total))}% ${formatSpeed(t.speed)}`;
   return formatBytes(t.total);
 }

@@ -1,4 +1,4 @@
-import { handleIncomingPush } from './push';
+import { handleIncomingPush, handlePushResume } from './push';
 import { initRtc, onIncomingSession } from './rtc';
 import { handleShareHello } from './shares';
 import { signaling } from './signaling';
@@ -12,6 +12,7 @@ export function startApp(): void {
       channel.listen((message) => {
         clearTimeout(timer);
         if (message.t === 'push') handleIncomingPush(session, channel, message);
+        else if (message.t === 'push-resume') handlePushResume(session, channel, message);
         else if (message.t === 'hello') handleShareHello(session, channel, message);
         else session.close('local');
       });

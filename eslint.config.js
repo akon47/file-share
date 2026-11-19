@@ -26,8 +26,13 @@ export default tseslint.config(
     languageOptions: { globals: { ...globals.serviceworker } },
   },
   {
-    files: ['src/server/**/*.ts', 'test/**/*.ts', 'scripts/**/*.mjs', '*.config.{js,ts}'],
+    files: ['src/server/**/*.ts', 'test/**/*.ts', '*.config.{js,ts}'],
     languageOptions: { globals: { ...globals.node } },
+  },
+  {
+    // Playwright scripts: Node, plus browser globals inside page.evaluate callbacks.
+    files: ['scripts/**/*.mjs'],
+    languageOptions: { globals: { ...globals.node, ...globals.browser } },
   },
   {
     rules: {

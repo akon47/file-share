@@ -19,6 +19,9 @@
 - 실제 브라우저 E2E: `npm run build && PORT=8090 node dist/server/index.js` 후 `npm run e2e -- http://localhost:8090`
   (Chromium·Firefox, 링크+비밀번호+zip, 코드, 가까운 기기 보내기/거절, 브라우저 간 전송, 콘솔 오류 없음). 화면: `node scripts/screenshots.mjs`.
   전송 로직을 바꾸면 커밋 전에 E2E 를 돌린다(Jenkins 에는 브라우저가 없다).
+- 이어받기: 전송 중 연결이 끊기면 2분 동안 자동 재연결 후 `ResumePoint {id, offset}` 부터 이어 보낸다(다운로드 스트림은 열린 채로 둔다).
+  공유는 받는 쪽이 다시 연결(`hello` 의 `token` 으로 승인 생략, 비밀번호 키 재사용, `get {ids, from}`), 가까운 기기는 보내는 쪽이
+  다시 연결(`push-resume {key}` → `resume-from`). E2E 5번이 데이터 채널을 강제로 닫아 300 MB 로 확인한다.
 - 주의: 받은 청크는 서비스 워커로 **transfer(소유권 이동)** 된다 — `write()` 뒤에 그 버퍼의 길이를 읽지 않는다(Firefox 에서 0 이 된다).
 
 ## 배포 (중요)

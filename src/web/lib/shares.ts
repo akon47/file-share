@@ -6,7 +6,7 @@ import type { Channel } from './channel';
 import { RateMeter } from './format';
 import type { ConnectionKind, PeerSession } from './rtc';
 import { RequestError, signaling } from './signaling';
-import { describeFiles, sendFiles, totalSize, TransferCancelled, type FileMeta } from './transfer';
+import { cleanResumePoint, describeFiles, sendFiles, totalSize, TransferCancelled, type FileMeta } from './transfer';
 import { toast } from './ui';
 
 // The sender side of a share: files stay in this tab; receivers connect peer-to-peer, prove they know the link
@@ -16,6 +16,8 @@ export type ReceiverStatus = 'auth' | 'approval' | 'browsing' | 'sending' | 'don
 
 export interface ShareReceiver {
   sid: string;
+  /** Stable per receiving page; lets a reconnecting receiver continue without being approved again. */
+  token: string | null;
   peer: PeerInfo;
   status: ReceiverStatus;
   sent: number;
@@ -65,6 +67,8 @@ interface Private {
   failures: number;
   lockedUntil: number;
   sessions: Set<PeerSession>;
+  /** Receiver tokens that were let in (after approval, if required). */
+  approved: Set<string>;
 }
 
 const ATTEMPTS_PER_RECEIVER = 5;
@@ -135,6 +139,7 @@ export async function openShare(input: NewShare): Promise<MyShare> {
     failures: 0,
     lockedUntil: 0,
     sessions: new Set(),
+    approved: new Set(),
   });
   myShares.unshift(share);
   return share;
@@ -208,6 +213,8 @@ export function handleShareHello(session: PeerSession, channel: Channel, hello: 
   }
   priv.sessions.add(session);
 
+  const token = typeof hello.token === 'string' && /^[A-Za-z0-9_-]{22}$/.test(hello.token) ? hello.token : null;
+  const previous = token ? share.receivers.find((r) => r.token === token) : undefined;
   const hasSecret = hello.hasSecret === true;
   const needsPassword = priv.passwordKey !== null;
   const meter = new RateMeter();
@@ -217,14 +224,15 @@ export function handleShareHello(session: PeerSession, channel: Channel, hello: 
 
   const entry = reactive<ShareReceiver>({
     sid: session.sid,
+    token,
     peer: session.remote,
     status: 'auth',
-    sent: 0,
-    total: 0,
+    sent: previous?.sent ?? 0,
+    total: previous?.total ?? 0,
     speed: 0,
     kind: null,
-    completed: false,
-    joinedAt: Date.now(),
+    completed: previous?.completed ?? false,
+    joinedAt: previous?.joinedAt ?? Date.now(),
     approve: () => {
       if (entry.status !== 'approval') return;
       grant();
@@ -236,23 +244,28 @@ export function handleShareHello(session: PeerSession, channel: Channel, hello: 
       setTimeout(() => session.close(null), 500);
     },
     disconnect: () => {
+      if (token) priv.approved.delete(token);
       sending?.abort();
       channel.send({ t: 'gone', reason: 'kicked' });
       entry.status = 'left';
       setTimeout(() => session.close(null), 300);
     },
   });
-  share.receivers.unshift(entry);
+  // A receiver reconnecting after a dropped connection takes over its old row.
+  const index = previous ? share.receivers.indexOf(previous) : -1;
+  if (index >= 0) share.receivers.splice(index, 1, entry);
+  else share.receivers.unshift(entry);
   if (share.receivers.length > 30) share.receivers.splice(30);
   void session.connectionKind().then((kind) => (entry.kind = kind));
 
   const grant = () => {
+    if (token) priv.approved.add(token);
     entry.status = 'browsing';
     channel.send({ t: 'manifest', title: share.title, files: share.metas });
   };
   const afterAuth = () => {
     authed = true;
-    if (share.approval) {
+    if (share.approval && !(token && priv.approved.has(token))) {
       entry.status = 'approval';
       channel.send({ t: 'wait-approval' });
       toast.info(`${entry.peer.name}님이 파일을 받으려고 해요.`);
@@ -306,6 +319,9 @@ export function handleShareHello(session: PeerSession, channel: Channel, hello: 
           ? [...new Set(message.ids.filter((id): id is number => Number.isInteger(id) && !!priv.files[id]))]
           : [];
         if (ids.length === 0) return;
+        // A receiver that reconnected after a drop asks to continue from where it stopped.
+        const from = message.from === undefined ? null : cleanResumePoint(message.from, priv.files, ids);
+        if (message.from !== undefined && !from) return;
         entry.status = 'sending';
         entry.sent = 0;
         entry.total = ids.reduce((sum, id) => sum + priv.files[id]!.size, 0);
@@ -321,6 +337,7 @@ export function handleShareHello(session: PeerSession, channel: Channel, hello: 
               entry.speed = meter.update(sent);
             },
             sending.signal,
+            from,
           );
           entry.status = 'done';
           if (!entry.completed) {

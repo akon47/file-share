@@ -41,6 +41,9 @@ the receiver's over an encrypted peer-to-peer connection. No install, no account
 - Received bytes are streamed through a service worker into the browser's download manager, so file size is not
   limited by memory (Chromium, Firefox). Safari/iOS fall back to collecting the file in memory.
 - Flow control end to end: the sender never runs more than 16 MB ahead of what the receiver has written to disk.
+- **Automatic resume**: if the connection drops mid-transfer (Wi-Fi hiccup, switching between Wi-Fi and LTE), both
+  sides keep the transfer for up to 2 minutes, reconnect, re-authenticate on their own and continue from the last
+  byte written — the browser download simply pauses and goes on.
 - Screen wake lock while transferring; a warning before closing a tab that is still sharing.
 
 ## 🧭 How "same network" works

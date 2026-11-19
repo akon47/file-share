@@ -2,7 +2,7 @@ import { CHUNK_SIZE, type Channel } from './channel';
 import type { Sink, FileWriter } from './save';
 
 // File streaming over a data channel. The sender sends, in order:
-//   {t:'file', id, size}  <binary chunks...>  {t:'file-end', id}   ... for each requested file, then {t:'done'}
+//   {t:'file', id, size, offset}  <binary chunks...>  {t:'file-end', id}   ... for each requested file, then {t:'done'}
 // The receiver writes chunks to a Sink and periodically sends {t:'ack', bytes} for the bytes it has written,
 // and the sender never runs more than WINDOW bytes ahead of those acks.
 
@@ -67,29 +67,64 @@ export class TransferCancelled extends Error {
   }
 }
 
-/** Sender: stream `ids` (in that order) from `files` (indexed by FileMeta.id). */
+/** Where an interrupted transfer continues: inside file `id`, after `offset` bytes. */
+export interface ResumePoint {
+  id: number;
+  offset: number;
+}
+
+export function cleanResumePoint(
+  value: unknown,
+  files: Array<{ size: number } | undefined>,
+  ids: number[],
+): ResumePoint | null {
+  if (!value || typeof value !== 'object') return null;
+  const { id, offset } = value as Partial<ResumePoint>;
+  if (!Number.isInteger(id) || !Number.isSafeInteger(offset) || !ids.includes(id!)) return null;
+  const size = files[id!]?.size ?? -1;
+  return offset! >= 0 && offset! <= size ? { id: id!, offset: offset! } : null;
+}
+
+/**
+ * Sender: stream `ids` (in that order) from `files` (indexed by FileMeta.id), optionally continuing from `from`.
+ * `onProgress` gets the bytes done for the whole request, including what was sent before an interruption.
+ */
 export async function sendFiles(
   channel: Channel,
   files: File[],
   ids: number[],
-  onProgress: (sentBytes: number) => void,
+  onProgress: (doneBytes: number) => void,
   signal?: AbortSignal,
+  from: ResumePoint | null = null,
 ): Promise<void> {
-  let sent = 0;
+  let startIndex = 0;
+  let startOffset = 0;
+  if (from) {
+    startIndex = ids.indexOf(from.id);
+    if (startIndex < 0) throw new Error('bad resume point');
+    startOffset = from.offset;
+  }
+  let done = ids.slice(0, startIndex).reduce((sum, id) => sum + (files[id]?.size ?? 0), 0) + startOffset;
+  // The ack window counts bytes on this channel only (the receiver re-bases its acks on a new channel).
+  let sentHere = 0;
   channel.acked = 0;
-  for (const id of ids) {
+  onProgress(done);
+  for (let i = startIndex; i < ids.length; i++) {
+    const id = ids[i]!;
     const file = files[id];
     if (!file) throw new Error(`unknown file ${id}`);
-    channel.send({ t: 'file', id, size: file.size });
-    for (let offset = 0; offset < file.size; offset += READ_BLOCK) {
+    const begin = i === startIndex ? startOffset : 0;
+    channel.send({ t: 'file', id, size: file.size, offset: begin });
+    for (let offset = begin; offset < file.size; offset += READ_BLOCK) {
       const block = new Uint8Array(await file.slice(offset, Math.min(file.size, offset + READ_BLOCK)).arrayBuffer());
       for (let pos = 0; pos < block.byteLength; pos += CHUNK_SIZE) {
         if (signal?.aborted) throw new TransferCancelled();
         const piece = block.subarray(pos, Math.min(block.byteLength, pos + CHUNK_SIZE));
-        await channel.waitForWindow(sent, WINDOW);
+        await channel.waitForWindow(sentHere, WINDOW);
         await channel.sendBinary(piece);
-        sent += piece.byteLength;
-        onProgress(sent);
+        sentHere += piece.byteLength;
+        done += piece.byteLength;
+        onProgress(done);
       }
     }
     channel.send({ t: 'file-end', id });
@@ -98,7 +133,10 @@ export async function sendFiles(
   await channel.flush();
 }
 
-/** Receiver: feed it the channel's messages; `done` settles when everything is written (or it fails). */
+/**
+ * Receiver: feed it the channel's messages; `done` settles when the last file is written (or it fails).
+ * After a dropped connection, `rebind()` it to the new channel and ask the sender to continue from `position()`.
+ */
 export class FileReceiver {
   readonly done: Promise<void>;
   received = 0;
@@ -107,12 +145,14 @@ export class FileReceiver {
   private queue: Promise<void> = Promise.resolve();
   private current: { meta: FileMeta; writer: FileWriter; received: number } | null = null;
   private nextIndex = 0;
+  private ackBase = 0;
   private lastAck = 0;
   private failed = false;
+  private finished = false;
   private readonly expected: FileMeta[];
 
   constructor(
-    private readonly channel: Channel,
+    private channel: Channel,
     files: FileMeta[],
     ids: number[],
     private readonly sink: Sink,
@@ -127,6 +167,14 @@ export class FileReceiver {
     this.done.catch(() => undefined);
   }
 
+  get ids(): number[] {
+    return this.expected.map((f) => f.id);
+  }
+
+  get settled(): boolean {
+    return this.finished || this.failed;
+  }
+
   /** Returns true if the message belonged to the transfer. */
   handle(message: { t: string } & Record<string, unknown>): boolean {
     if (!['file', 'file-end', 'done', 'cancel'].includes(message.t)) return false;
@@ -138,23 +186,47 @@ export class FileReceiver {
     this.enqueue(() => this.write(new Uint8Array(data)));
   }
 
+  /** Continue on a new connection; acks restart from zero there. */
+  rebind(channel: Channel): void {
+    this.channel = channel;
+    this.ackBase = this.received;
+    this.lastAck = this.received;
+  }
+
+  /** Where to continue, once everything that already arrived has been written. */
+  async position(): Promise<ResumePoint> {
+    await this.queue;
+    if (this.current) return { id: this.current.meta.id, offset: this.current.received };
+    const next = this.expected[this.nextIndex] ?? this.expected[this.expected.length - 1]!;
+    return { id: next.id, offset: 0 };
+  }
+
   fail(error: unknown): void {
-    if (this.failed) return;
+    if (this.failed || this.finished) return;
     this.failed = true;
     this.sink.abort(error);
     this.rejectDone(error);
   }
 
   private enqueue(task: () => Promise<void>): void {
-    this.queue = this.queue.then(() => (this.failed ? undefined : task())).catch((error) => this.fail(error));
+    this.queue = this.queue
+      .then(() => (this.failed || this.finished ? undefined : task()))
+      .catch((error) => this.fail(error));
   }
 
   private async process(message: { t: string } & Record<string, unknown>): Promise<void> {
     switch (message.t) {
       case 'file': {
+        const offset = Number(message.offset ?? 0);
+        if (this.current) {
+          // A resumed transfer continues inside the file we were writing.
+          if (message.id === this.current.meta.id && offset === this.current.received) return;
+          throw new Error('file not finished');
+        }
         const meta = this.expected[this.nextIndex];
-        if (!meta || message.id !== meta.id || message.size !== meta.size) throw new Error('unexpected file');
-        if (this.current) throw new Error('file not finished');
+        if (!meta || message.id !== meta.id || message.size !== meta.size || offset !== 0) {
+          throw new Error('unexpected file');
+        }
         this.nextIndex++;
         this.current = { meta, writer: await this.sink.openFile(meta), received: 0 };
         return;
@@ -166,14 +238,16 @@ export class FileReceiver {
         await current.writer.close();
         this.current = null;
         this.ack(true);
+        if (this.nextIndex === this.expected.length) {
+          // Everything is written; the closing {t:'done'} may never come if the connection drops right now.
+          await this.sink.finish();
+          this.finished = true;
+          this.resolveDone();
+        }
         return;
       }
-      case 'done': {
-        if (this.current || this.nextIndex !== this.expected.length) throw new Error('incomplete transfer');
-        await this.sink.finish();
-        this.resolveDone();
+      case 'done':
         return;
-      }
       case 'cancel':
         throw new TransferCancelled('remote cancelled');
     }
@@ -195,7 +269,7 @@ export class FileReceiver {
   private ack(force: boolean): void {
     if (force || this.received - this.lastAck >= ACK_EVERY) {
       this.lastAck = this.received;
-      this.channel.sendAck(this.received);
+      this.channel.sendAck(this.received - this.ackBase);
     }
   }
 }

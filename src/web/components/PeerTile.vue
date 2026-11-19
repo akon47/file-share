@@ -61,12 +61,14 @@ const input = ref<HTMLInputElement | null>(null);
 const dragging = ref(false);
 
 const transfer = computed(() => activeOutgoing(props.peer.id));
-const isActive = computed(() => ['connecting', 'waiting', 'sending'].includes(transfer.value?.status ?? ''));
+const isActive = computed(() =>
+  ['connecting', 'waiting', 'sending', 'reconnecting'].includes(transfer.value?.status ?? ''),
+);
 const showRing = computed(() => isActive.value);
 const CIRCUMFERENCE = 2 * Math.PI * 30;
 const ringOffset = computed(() => {
   const t = transfer.value;
-  if (!t || t.status !== 'sending') return CIRCUMFERENCE * 0.75;
+  if (!t || (t.status !== 'sending' && t.status !== 'reconnecting')) return CIRCUMFERENCE * 0.75;
   return CIRCUMFERENCE * (1 - percent(t.sent, t.total) / 100);
 });
 
@@ -80,6 +82,8 @@ const caption = computed(() => {
       return '수락을 기다리는 중…';
     case 'sending':
       return `보내는 중 ${Math.floor(percent(t.sent, t.total))}%`;
+    case 'reconnecting':
+      return `다시 연결하는 중… ${Math.floor(percent(t.sent, t.total))}%`;
     case 'done':
       return `${formatBytes(t.total)} 보냈어요`;
     case 'declined':
@@ -96,6 +100,7 @@ const captionTone = computed(() => {
   const s = transfer.value?.status;
   if (s === 'done') return 'tone-success';
   if (s === 'failed' || s === 'declined') return 'tone-danger';
+  if (s === 'reconnecting') return 'tone-warning';
   if (s === 'connecting' || s === 'waiting' || s === 'sending') return 'tone-accent';
   return '';
 });
@@ -240,6 +245,11 @@ function drop(event: DragEvent): void {
 
 .tone-accent {
   color: var(--accent-text);
+  font-weight: 600;
+}
+
+.tone-warning {
+  color: var(--warning);
   font-weight: 600;
 }
 

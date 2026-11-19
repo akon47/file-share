@@ -73,7 +73,7 @@
         </div>
 
         <!-- file list -->
-        <template v-else-if="['ready', 'receiving', 'done'].includes(s.phase)">
+        <template v-else-if="['ready', 'receiving', 'reconnecting', 'done'].includes(s.phase)">
           <div v-if="s.phase === 'done'" class="done-banner">
             <span class="done-icon"><AppIcon name="check" :size="22" :stroke-width="3" /></span>
             <div>
@@ -85,7 +85,7 @@
           </div>
 
           <div class="list-head">
-            <label v-if="s.files.length > 1 && s.phase !== 'receiving'" class="check-all">
+            <label v-if="s.files.length > 1 && !busy" class="check-all">
               <input type="checkbox" :checked="allSelected" @change="toggleAll" />
               <span class="small">전체 선택</span>
             </label>
@@ -93,18 +93,14 @@
             <span class="small subtle num">{{ formatBytes(selectedBytes) }}</span>
           </div>
           <ul class="files">
-            <li
-              v-for="file in s.files"
-              :key="file.id"
-              :class="{ dim: s.phase === 'receiving' && !s.selected.includes(file.id) }"
-            >
+            <li v-for="file in s.files" :key="file.id" :class="{ dim: busy && !s.selected.includes(file.id) }">
               <label class="file-line">
                 <input
                   v-if="s.files.length > 1"
                   v-model="s.selected"
                   type="checkbox"
                   :value="file.id"
-                  :disabled="s.phase === 'receiving'"
+                  :disabled="busy"
                   :aria-label="`${file.name} 선택`"
                 />
                 <FileRow :name="file.name" :size="file.size" :type="file.type">
@@ -116,7 +112,7 @@
                     title="받음"
                   />
                   <button
-                    v-if="s.files.length > 1 && s.phase !== 'receiving'"
+                    v-if="s.files.length > 1 && !busy"
                     class="btn btn-icon btn-sm"
                     type="button"
                     :aria-label="`${file.name} 받기`"
@@ -130,12 +126,17 @@
             </li>
           </ul>
 
-          <div v-if="s.phase === 'receiving'" class="progress-box">
+          <div v-if="busy" class="progress-box">
+            <p v-if="s.phase === 'reconnecting'" class="reconnecting small">
+              <span class="spinner" /> 연결이 끊겼어요. 다시 연결해서 끊긴 곳부터 이어 받을게요…
+            </p>
             <div class="progress-top">
               <span class="small ellipsis">{{ s.currentFile }}</span>
               <strong class="num">{{ Math.floor(percent(s.received, s.total)) }}%</strong>
             </div>
-            <div class="progress"><span :style="{ width: `${percent(s.received, s.total)}%` }" /></div>
+            <div class="progress" :class="{ paused: s.phase === 'reconnecting' }">
+              <span :style="{ width: `${percent(s.received, s.total)}%` }" />
+            </div>
             <div class="progress-bottom tiny subtle num">
               <span>{{ formatBytes(s.received) }} / {{ formatBytes(s.total) }}</span>
               <span
@@ -154,7 +155,7 @@
             <AppIcon name="download" :size="18" />
             {{ downloadLabel }}
           </button>
-          <p v-if="s.phase !== 'receiving' && s.selected.length > 1" class="tiny subtle zip-note">
+          <p v-if="!busy && s.selected.length > 1" class="tiny subtle zip-note">
             여러 파일은 zip 파일 하나로 받아요. 하나씩 받으려면 파일 옆의 받기 버튼을 누르세요.
           </p>
         </template>
@@ -258,6 +259,7 @@ async function submitPassword(): Promise<void> {
   await controller.submitPassword(password.value);
 }
 
+const busy = computed(() => s.phase === 'receiving' || s.phase === 'reconnecting');
 const allSelected = computed(() => s.selected.length === s.files.length);
 const selectedBytes = computed(() =>
   s.files.filter((f) => s.selected.includes(f.id)).reduce((sum, f) => sum + f.size, 0),
@@ -273,7 +275,7 @@ function toggleAll(): void {
 }
 
 onBeforeRouteLeave(async () => {
-  if (s.phase !== 'receiving') return true;
+  if (!busy.value) return true;
   return confirmDialog({
     title: '받기를 멈추고 나갈까요?',
     message: '지금 받고 있는 파일은 저장되지 않아요.',
@@ -465,6 +467,27 @@ input[type='checkbox'] {
   display: flex;
   justify-content: space-between;
   gap: var(--s-3);
+}
+
+.reconnecting {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  padding: var(--s-2) var(--s-3);
+  border-radius: var(--radius);
+  background: var(--warning-soft);
+  color: var(--warning);
+  font-weight: 600;
+}
+
+.reconnecting .spinner {
+  width: 14px;
+  height: 14px;
+  border-top-color: var(--warning);
+}
+
+.progress.paused > span {
+  background: var(--warning);
 }
 
 .progress-box .btn {

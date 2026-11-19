@@ -2,7 +2,8 @@
 //   npm run build && PORT=8090 node dist/server/index.js &
 //   node scripts/e2e.mjs [baseUrl]
 // Covers: share link + wrong/right password + zip of several files, 6-digit code, nearby push with accept,
-// Chromium <-> Firefox, and that no page logs CSP or other console errors.
+// Chromium <-> Firefox, resuming 300 MB transfers after a dropped connection (share and nearby), and that no
+// page logs CSP or other console errors.
 import { chromium, firefox } from 'playwright';
 import { createHash, randomBytes } from 'node:crypto';
 import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
@@ -32,6 +33,23 @@ function watch(page, label) {
 
 async function open(browser, label) {
   const context = await browser.newContext({ acceptDownloads: true });
+  // Track data channels so a test can drop them (both ends see the channel close, like a lost connection).
+  await context.addInitScript(() => {
+    const channels = [];
+    window.__dcs = channels;
+    const Original = window.RTCPeerConnection;
+    window.RTCPeerConnection = class extends Original {
+      constructor(...args) {
+        super(...args);
+        this.addEventListener('datachannel', (event) => channels.push(event.channel));
+      }
+      createDataChannel(...args) {
+        const channel = super.createDataChannel(...args);
+        channels.push(channel);
+        return channel;
+      }
+    };
+  });
   const page = await context.newPage();
   watch(page, label);
   await page.goto(base);
@@ -177,6 +195,68 @@ try {
     b.page.getByRole('button', { name: '받기', exact: true }).click({ timeout: 20_000 }),
   ]);
   check(sha(await saveDownload(fromFox, 'fox.txt')) === sha(small), 'Firefox -> Chromium via link intact');
+
+  // ---------- 5. resume after a dropped connection ----------
+  console.log('5. resume after a dropped connection');
+  const hugePath = path.join(out, 'huge.bin');
+  const huge = randomBytes(300 * 1024 * 1024 + 11);
+  writeFileSync(hugePath, huge);
+  const hugeSha = sha(huge);
+  const dropAt = async (page, progress, percentAtLeast) => {
+    await page.waitForFunction(
+      ([selector, min]) => {
+        const text = document.querySelector(selector)?.textContent ?? '';
+        const value = Number(/(\d+)\s*%/.exec(text)?.[1] ?? 0);
+        return value >= min && value < 95;
+      },
+      [progress, percentAtLeast],
+      { timeout: 60_000, polling: 50 },
+    );
+    // Close every data channel on this side: both ends see the channel close, like a dropped connection.
+    await page.evaluate(() => window.__dcs.forEach((dc) => dc.close()));
+  };
+
+  // 5a. share link with a password: the receiver reconnects and re-authenticates by itself
+  const r1 = await open(chrome, 'R1');
+  const r2 = await open(chrome, 'R2');
+  await r1.page.locator('.composer input[type=file]').setInputFiles(hugePath);
+  await r1.page.getByLabel('비밀번호 사용').check();
+  await r1.page.getByPlaceholder('비밀번호', { exact: true }).fill('resume!');
+  await r1.page.getByRole('button', { name: '공유 시작' }).click();
+  const rlink = await r1.page.getByLabel('공유 링크').inputValue();
+  await r2.page.goto(rlink);
+  await r2.page.getByPlaceholder('비밀번호').fill('resume!');
+  await r2.page.getByRole('button', { name: '확인' }).click();
+  const [hugeDownload] = await Promise.all([
+    r2.page.waitForEvent('download', { timeout: 60_000 }),
+    r2.page.getByRole('button', { name: '받기', exact: true }).click({ timeout: 20_000 }),
+  ]);
+  await dropAt(r2.page, '.progress-top strong', 15);
+  await r2.page.getByText('연결이 끊겼어요').waitFor({ timeout: 15_000 });
+  check(true, 'receiver noticed the drop and is reconnecting');
+  await r2.page.getByText('받기 완료').waitFor({ timeout: 180_000 });
+  check(sha(await saveDownload(hugeDownload, 'huge-share.bin')) === hugeSha, 'share: 300 MB intact after resume');
+  check((await r1.page.locator('.receiver').count()) === 1, 'sender shows one receiver row (the reconnect reused it)');
+  await r1.context.close();
+  await r2.context.close();
+
+  // 5b. nearby push: the sender reconnects, the receiver continues the same download
+  const p1 = await open(chrome, 'P1');
+  const p2 = await open(chrome, 'P2');
+  const p2Name = (await p2.page.locator('.my-device .name').innerText()).trim();
+  const ptile = p1.page.locator('.peer-tile', { hasText: p2Name });
+  await ptile.waitFor({ timeout: 15_000 });
+  await ptile.locator('input[type=file]').setInputFiles(hugePath);
+  const paccept = p2.page.getByRole('alertdialog').getByRole('button', { name: '받기' });
+  await paccept.waitFor({ timeout: 20_000 });
+  const [pushDownload] = await Promise.all([p2.page.waitForEvent('download', { timeout: 60_000 }), paccept.click()]);
+  await dropAt(p2.page, '.tray-item .num', 15);
+  await ptile.getByText('다시 연결하는 중').waitFor({ timeout: 15_000 });
+  check(true, 'sender tile shows reconnecting');
+  await ptile.getByText('보냈어요').waitFor({ timeout: 180_000 });
+  check(sha(await saveDownload(pushDownload, 'huge-push.bin')) === hugeSha, 'push: 300 MB intact after resume');
+  await p1.context.close();
+  await p2.context.close();
 
   // screenshots for a visual check
   await a.page.goto(base);

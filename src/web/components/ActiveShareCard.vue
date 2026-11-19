@@ -189,7 +189,7 @@ function statusText(r: ShareReceiver): string {
     done: '받기 완료',
     denied: '거절함',
     failed: '실패',
-    left: '나감',
+    left: '연결 끊김',
   };
   return map[r.status];
 }
