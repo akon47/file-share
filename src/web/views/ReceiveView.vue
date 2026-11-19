@@ -378,6 +378,10 @@ onBeforeUnmount(() => controller.dispose());
   width: min(100%, 360px);
 }
 
+.password-row .btn {
+  height: auto;
+}
+
 .done-banner {
   display: flex;
   align-items: center;

@@ -138,7 +138,7 @@
         </div>
 
         <div class="actions">
-          <button class="btn btn-ghost" type="button" @click="reset">취소</button>
+          <button class="btn btn-secondary btn-lg cancel" type="button" @click="reset">취소</button>
           <button class="btn btn-lg start" type="button" :disabled="!canStart" @click="start">
             <span v-if="starting" class="spinner on-accent" />
             <AppIcon v-else name="link" :size="18" />
@@ -367,15 +367,11 @@ defineExpose({ add });
 }
 
 .actions {
-  display: flex;
-  justify-content: flex-end;
+  display: grid;
+  grid-template-columns: minmax(96px, 1fr) 2fr;
+  align-items: center;
   gap: var(--s-2);
   margin-top: var(--s-6);
-}
-
-.start {
-  flex: 1;
-  max-width: 240px;
 }
 
 .spinner.on-accent {

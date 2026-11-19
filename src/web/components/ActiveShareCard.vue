@@ -275,6 +275,10 @@ function statusBadge(status: ReceiverStatus): string {
   min-width: 0;
 }
 
+.link-row .btn {
+  height: auto;
+}
+
 .code-row {
   display: flex;
   align-items: flex-end;
