@@ -6,6 +6,8 @@
         파일은 서버에 올라가지 않고 브라우저끼리 직접, 암호화된 연결로 전송돼요.
       </p>
       <nav class="links" aria-label="바닥글">
+        <RouterLink to="/terms">이용약관</RouterLink>
+        <RouterLink to="/privacy"><strong>개인정보처리방침</strong></RouterLink>
         <a href="https://github.com/akon47/file-share" target="_blank" rel="noopener">GitHub</a>
         <a href="https://screenshare.kimhwan.com" target="_blank" rel="noopener">Screen Share</a>
         <a href="https://kimhwan.com" target="_blank" rel="noopener">kimhwan.com</a>
@@ -43,7 +45,8 @@ import AppIcon from './AppIcon.vue';
 
 .links {
   display: flex;
-  gap: var(--s-4);
+  flex-wrap: wrap;
+  gap: var(--s-2) var(--s-4);
 }
 
 .links a {

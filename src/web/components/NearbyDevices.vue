@@ -8,9 +8,15 @@
       <span v-if="net.peers.length" class="badge badge-accent num">{{ net.peers.length }}대</span>
     </div>
     <div class="card-body">
-      <div v-if="net.peers.length" class="grid">
-        <PeerTile v-for="peer in net.peers" :key="peer.id" :peer="peer" />
-      </div>
+      <template v-if="net.peers.length">
+        <div class="grid">
+          <PeerTile v-for="peer in net.peers" :key="peer.id" :peer="peer" />
+        </div>
+        <p class="tiny subtle legal-note">
+          저작권 침해물·불법촬영물 등 불법 파일은 보낼 수 없고, 보낸 파일에 대한 책임은 보낸 사람에게 있어요.
+          <RouterLink to="/terms">이용약관</RouterLink>
+        </p>
+      </template>
       <div v-else class="empty">
         <div class="radar" aria-hidden="true">
           <span class="pulse" />
@@ -52,6 +58,17 @@ const host = location.host;
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
   gap: var(--s-3);
+}
+
+.legal-note {
+  margin-top: var(--s-4);
+  line-height: 1.5;
+}
+
+.legal-note a {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
 }
 
 .empty {

@@ -11,6 +11,8 @@ const router = createRouter({
   routes: [
     { path: '/', component: HomeView },
     { path: '/s/:id([A-Za-z0-9_-]{22})', component: () => import('./views/ReceiveView.vue') },
+    { path: '/terms', component: () => import('./views/TermsView.vue') },
+    { path: '/privacy', component: () => import('./views/PrivacyView.vue') },
     { path: '/:pathMatch(.*)*', component: () => import('./views/NotFoundView.vue') },
   ],
   scrollBehavior: () => ({ top: 0 }),

@@ -1,0 +1,80 @@
+/* Terms of use and privacy policy pages. */
+.container-legal {
+  max-width: calc(760px + 32px);
+}
+
+.legal {
+  display: grid;
+  gap: var(--s-8);
+  line-height: 1.75;
+  word-break: keep-all;
+}
+
+.legal-head {
+  display: grid;
+  gap: var(--s-3);
+}
+
+.legal-head h1 {
+  font-size: var(--text-3xl);
+}
+
+.legal section {
+  display: grid;
+  gap: var(--s-3);
+}
+
+.legal h2 {
+  font-size: var(--text-xl);
+}
+
+.legal ul {
+  display: grid;
+  gap: var(--s-2);
+  padding-left: 1.2em;
+  list-style: disc;
+}
+
+.legal li::marker {
+  color: var(--text-3);
+}
+
+.legal code {
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+}
+
+.legal .table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.legal table {
+  width: 100%;
+  min-width: 560px;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+}
+
+.legal th,
+.legal td {
+  padding: var(--s-3) var(--s-4);
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  vertical-align: top;
+}
+
+.legal th {
+  background: var(--surface-2);
+  color: var(--text-2);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.legal tr:last-child td {
+  border-bottom: none;
+}

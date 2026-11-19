@@ -151,6 +151,10 @@
         <p class="tiny subtle keep-open">
           <AppIcon name="info" :size="14" /> 이 탭을 열어 둔 동안만 받을 수 있어요. 파일은 이 기기에서 바로 전송돼요.
         </p>
+        <p class="tiny subtle legal-note">
+          공유를 시작하면 <RouterLink to="/terms">이용약관</RouterLink>에 동의한 것으로 봐요. 저작권 침해물·불법촬영물
+          등 불법 파일은 보낼 수 없고, 보낸 파일에 대한 책임은 보낸 사람에게 있어요.
+        </p>
       </template>
       <input ref="input" type="file" multiple hidden @change="picked" />
     </div>
@@ -380,6 +384,17 @@ defineExpose({ add });
 .spinner.on-accent {
   border-color: rgba(255, 255, 255, 0.35);
   border-top-color: var(--on-accent);
+}
+
+.legal-note {
+  margin-top: var(--s-2);
+  line-height: 1.5;
+}
+
+.legal-note a {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
 }
 
 .keep-open {
