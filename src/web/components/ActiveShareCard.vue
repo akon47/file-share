@@ -18,6 +18,13 @@
         <span v-if="share.hasPassword" class="badge badge-warning"><AppIcon name="lock" :size="12" /> 비밀번호</span>
         <span v-if="share.approval" class="badge badge-accent"><AppIcon name="user-check" :size="12" /> 승인 필요</span>
         <span v-if="share.lan" class="badge"><AppIcon name="wifi" :size="12" /> 같은 네트워크에 표시</span>
+        <span
+          v-if="share.lan && !share.hasPassword && !share.approval"
+          class="badge badge-accent"
+          title="링크 없이 목록이나 코드로 들어온 사람은 내가 허용해야 받을 수 있어요"
+        >
+          <AppIcon name="user-check" :size="12" /> 링크 없는 사람은 승인
+        </span>
         <span v-if="share.maxReceivers" class="badge num">
           <AppIcon name="users" :size="12" /> {{ share.completed }} / {{ share.maxReceivers }}명
         </span>

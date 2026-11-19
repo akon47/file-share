@@ -115,7 +115,10 @@
           <div class="option">
             <div class="option-text">
               <span class="option-title"><AppIcon name="wifi" :size="16" /> 같은 네트워크에 표시</span>
-              <span class="hint">가까운 기기의 화면에 이 공유가 보여요.</span>
+              <span class="hint">
+                공인 IP 가 같은 기기(회사·학교·카페 와이파이라면 모르는 사람 포함)의 화면에 보여요.
+                <template v-if="!usePassword">링크 없이 목록에서 들어온 사람은 내가 승인해야 받을 수 있어요.</template>
+              </span>
             </div>
             <label class="switch">
               <input v-model="lan" type="checkbox" aria-label="같은 네트워크에 표시" />
@@ -174,7 +177,7 @@ const usePassword = ref(false);
 const password = ref('');
 const showPassword = ref(false);
 const approval = ref(false);
-const lan = ref(true);
+const lan = ref(false);
 const maxReceivers = ref(0);
 const starting = ref(false);
 
@@ -230,7 +233,7 @@ function reset(): void {
   usePassword.value = false;
   password.value = '';
   approval.value = false;
-  lan.value = true;
+  lan.value = false;
   maxReceivers.value = 0;
   showAll.value = false;
 }

@@ -258,6 +258,39 @@ try {
   await p1.context.close();
   await p2.context.close();
 
+  // ---------- 6. share listed on the network without a password ----------
+  console.log('6. LAN-listed share without a password');
+  const l1 = await open(chrome, 'L1');
+  const l2 = await open(chrome, 'L2');
+  const l3 = await open(chrome, 'L3');
+  const l1Name = (await l1.page.locator('.my-device .name').innerText()).trim();
+  await l1.page
+    .locator('.composer input[type=file]')
+    .setInputFiles([{ name: 'lan.txt', mimeType: 'text/plain', buffer: small }]);
+  check(!(await l1.page.getByLabel('같은 네트워크에 표시').isChecked()), 'network listing is off by default');
+  await l1.page.getByLabel('같은 네트워크에 표시').check();
+  await l1.page.getByRole('button', { name: '공유 시작' }).click();
+  const lanLink = await l1.page.getByLabel('공유 링크').inputValue();
+
+  // From the list (no link secret): the sender has to approve.
+  await l2.page.locator('.share-item', { hasText: `${l1Name}의 파일` }).click({ timeout: 15_000 });
+  await l2.page.getByText('보내는 사람의 승인을 기다리는 중').waitFor({ timeout: 20_000 });
+  check(true, 'visitor from the list waits for approval');
+  await l1.page.locator('.receiver.approval').getByRole('button', { name: '허용' }).click({ timeout: 15_000 });
+  const [lanDownload] = await Promise.all([
+    l2.page.waitForEvent('download', { timeout: 30_000 }),
+    l2.page.getByRole('button', { name: '받기', exact: true }).click({ timeout: 15_000 }),
+  ]);
+  check(sha(await saveDownload(lanDownload, 'lan.txt')) === sha(small), 'approved visitor gets the file');
+
+  // With the link: no approval.
+  await l3.page.goto(lanLink);
+  await l3.page.getByRole('button', { name: '받기', exact: true }).waitFor({ timeout: 20_000 });
+  check(true, 'link holder skips approval');
+  await l1.context.close();
+  await l2.context.close();
+  await l3.context.close();
+
   // screenshots for a visual check
   await a.page.goto(base);
   await a.page.locator('.status.online').waitFor();

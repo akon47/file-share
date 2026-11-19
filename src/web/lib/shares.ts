@@ -265,7 +265,10 @@ export function handleShareHello(session: PeerSession, channel: Channel, hello: 
   };
   const afterAuth = () => {
     authed = true;
-    if (share.approval && !(token && priv.approved.has(token))) {
+    // A share listed on the network without a password is visible to everyone behind the same public IP
+    // (offices, campuses, cafes): whoever came in without the link must be let in by the sender.
+    const strangerOnLan = share.lan && !needsPassword && !hasSecret;
+    if ((share.approval || strangerOnLan) && !(token && priv.approved.has(token))) {
       entry.status = 'approval';
       channel.send({ t: 'wait-approval' });
       toast.info(`${entry.peer.name}님이 파일을 받으려고 해요.`);
